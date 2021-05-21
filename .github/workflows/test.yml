@@ -1,0 +1,316 @@
+name: tests
+
+on:
+  schedule: 
+    - cron: "42 3 * * *"
+  workflow_dispatch:
+    inputs:
+      swow_ref:
+        description: 'Using Swow git ref'
+        required: true
+        default: 'ci'
+
+jobs:
+  get-swowref:
+    name: Check if Swow have not tested
+    outputs:
+      refhash: ${{steps.gethash.outputs.refhash}}
+      ok: ${{steps.check.outputs.ok}}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Swow
+        uses: actions/checkout@v2
+        with:
+          ref: "${{ github.event.inputs.swow_ref && github.event.inputs.swow_ref || 'ci' }}"
+          repository: swow/swow
+          path: swow
+      - name: Get Swow ref hash
+        id: gethash
+        shell: bash
+        working-directory: swow
+        run: |
+          swow_ref=`git rev-parse HEAD`
+          echo "::set-output name=refhash::${swow_ref}"
+      - name: Checkout bcreports
+        uses: actions/checkout@v2
+        with:
+          path: report
+      - name: Check if we have not tested
+        id: check
+        shell: bash
+        working-directory: report
+        run: |
+          swow_ref="${{ steps.gethash.outputs.refhash }}"
+          swow_ref_tail=${swow_ref##??}
+          swow_ref_head=${swow_ref%%${swow_ref_tail}}
+
+          ok="yes"
+
+          [ -d "Windows/${swow_ref_head}/${swow_ref_tail}" ] && ok="no"
+          [ -d "Linux/${swow_ref_head}/${swow_ref_tail}" ] && ok="no"
+          [ -d "macOS/${swow_ref_head}/${swow_ref_tail}" ] && ok="no"
+          echo "$ok"
+          echo "::set-output name=ok::${ok}"
+  unix-test:
+    needs: get-swowref
+    if: needs.get-swowref.outputs.ok == 'yes'
+    #if: "false"
+    name: Swow bc at ${{ matrix.os }} PHP ${{ matrix.phpver }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest", "macos-latest"]
+        #os: ["ubuntu-latest"]
+        phpver: ["7.3", "7.4", "8.0"]
+        #phpver: ["7.4"]
+      max-parallel: 6
+    steps:
+      - name: Setup PHP
+        uses: shivammathur/setup-php@master
+        with:
+          php-version: ${{ matrix.phpver }}
+          coverage: none
+          extensions: curl,openssl
+      - name: Checkout Swow
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ needs.get-swowref.outputs.refhash }}
+          repository: swow/swow
+          path: swow
+      - name: Setup extension dependencies
+        run: |
+          if [ ${{ runner.os }} = 'Linux' ]
+          then
+            sudo apt-get update
+            sudo apt-get install -yqq libcurl4-openssl-dev
+          fi
+      - name: Build Swow extension
+        run: |
+          cd swow/ext
+          printf "::group::\033[1mRun phpize\033[0m\n"
+          phpize
+          printf "::group::\033[1mStart configure\033[0m\n"
+          ./configure --enable-swow\
+            --enable-swow-debug \
+            --enable-swow-ssl=${{ runner.os == 'Linux' && 'yes' || '/usr/local/opt/openssl' }} \
+            --enable-swow-curl=${{ runner.os == 'Linux' && 'yes' || '/usr/local/opt/curl' }}
+          printf "::group::\033[1mStart build Swow\033[0m\n"
+          make -j`${{ runner.os == 'Linux' && 'nproc' || 'sysctl -n hw.logicalcpu' }}`
+          printf "::group::\033[1mDone build Swow\033[0m\n"
+          php -n -d extension=.libs/swow.so --ri swow
+          printf "::group::\033[1mInstall Swow\033[0m\n"
+          ${{ runner.os == 'Linux' && 'sudo' || ''}} make install-modules          
+      - name: Checkout phpbc
+        uses: actions/checkout@v2
+        with:
+          repository: dixyes/phpbc
+          path: phpbc
+      - name: Test use actions
+        uses: ./phpbc/action
+        with:
+          skip: Zend/tests/arginfo_zpp_mismatch.*
+          #skip: sapi/.*,Zend/.*,ext/.*
+          expr_args: -d extension=swow
+      - name: Prepare artifact
+        shell: bash
+        id: prepareartifact
+        run: |
+          swow_ref="${{ needs.get-swowref.outputs.refhash }}"
+          swow_ref_tail=${swow_ref##??}
+          swow_ref_head=${swow_ref%%${swow_ref_tail}}
+          echo "::set-output name=key::${swow_ref}-${{ matrix.phpver }}"
+          mkdir report
+          cd report
+          mkdir -p ${{runner.os}}/${swow_ref_head}/${swow_ref_tail}
+          cp ../phpbc_results.json ${{runner.os}}/${swow_ref_head}/${swow_ref_tail}/PHP${{ matrix.phpver }}.json
+          cp ../phpbc_results.md ${{runner.os}}/${swow_ref_head}/${swow_ref_tail}/PHP${{ matrix.phpver }}.md
+          cp ../phpbc_results.md ${{runner.os}}_PHP${{ matrix.phpver }}_latest.md
+
+      - name: 'Upload test result'
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ needs.get-swowref.outputs.refhash }}
+          path: report/**
+          retention-days: 1
+  win-test:
+    needs: get-swowref
+    if: needs.get-swowref.outputs.ok == 'yes'
+    name: Swow bc at ${{ matrix.os }} PHP ${{ matrix.phpver }} ${{ matrix.ts == '1' && 'ts' || 'nts' }}
+    runs-on: "${{ matrix.os }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: ["x64"]
+        os: ['windows-latest', 'windows-2016']
+        #os: ['windows-latest']
+        phpver: ['8.0', '7.4', '7.3']
+        #phpver: ['8.0']
+        ts: [ '0', '1' ]
+        #ts: [ '0']
+        exclude:
+          - os: windows-latest
+            phpver: "7.4"
+          - os: windows-latest
+            phpver: "7.3"
+          - os: windows-2016
+            phpver: "8.0"
+          - os: windows-2016
+            phpver: "8.1"
+      max-parallel: 6
+    env:
+      deps: openssl,libcurl,zlib,libssh2,nghttp2
+      tools_path: C:\tools\phpdev
+      UNIX_COLOR: "1"
+    steps:
+      - name: Checkout Swow
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ needs.get-swowref.outputs.refhash }}
+          repository: swow/swow
+          path: swow
+      - name: Prepare caches
+        id: cacheprepare
+        working-directory: swow
+        run: |
+          . "./.github/workflows/winext/utils.ps1" -ToolName "cacheprepare" -MaxTry 3
+          $os = "${{ matrix.os }}"
+          if($os.Equals("windows-latest") -Or $os.Equals("windows-2019")){
+            $PhpVCVer = "VS16"
+          }elseif($os.Equals("windows-2016")){
+            $PhpVCVer = "VC15"
+          }
+          function phpsdkver{
+            $headers = @{
+              "accept"="application/vnd.github.v3+json";
+              "content-type"="application/json";
+              "authorization"="Bearer ${{ secrets.GITHUB_TOKEN }}";
+            }
+            $info = fetchjson -Uri "https://api.github.com/repos/microsoft/php-sdk-binary-tools/git/ref/heads/master" -Headers $headers
+            if(!$info){
+              warn "Cannot fetch php-sdk-binary-tools info from api.github.com"
+            }else{
+              $ver = $info."object"."sha"
+              Write-Host "::set-output name=phpsdkver::$ver"
+            }
+          }
+          info "Using $PhpVCVer"
+          $ret = 1
+          phpsdkver
+          ./.github/workflows/winext/getphp.ps1 `
+            -PhpVer ${{ matrix.phpver }} `
+            -PhpArch ${{ matrix.arch }} `
+            -PhpVCVer $PhpVCVer `
+            -PhpTs ${{ matrix.ts }} `
+            -DryRun 1 &&
+          ./.github/workflows/winext/devpack.ps1 `
+            -PhpVer ${{ matrix.phpver }} `
+            -PhpArch ${{ matrix.arch }} `
+            -PhpVCVer $PhpVCVer `
+            -PhpTs ${{ matrix.ts }} `
+            -DryRun 1 &&
+          ./.github/workflows/winext/deps.ps1 `
+            ${{ env.deps }} `
+            -DryRun 1 &&
+          ($ret = 0 | Out-Null)
+          exit $ret
+      - name: Cache build environments
+        uses: actions/cache@v2
+        with:
+          path: |
+            ${{ env.tools_path }}
+          key: buildenv-v2-${{ matrix.arch }}-${{ matrix.ts }}-${{ steps.cacheprepare.outputs.phpver }}-${{ steps.cacheprepare.outputs.devpackver }}-${{ steps.cacheprepare.outputs.downloadeddeps }}-${{ steps.cacheprepare.outputs.phpsdkver }}
+      - name: Build Swow extension
+        id: ext-build
+        uses: ./swow/.github/workflows/winext
+        with:
+          ext-path: ./swow/ext
+          tools-path: ${{ env.tools_path }}
+          ext-name: swow
+          deps: ${{ env.deps }}
+          phpver: ${{ matrix.phpver }}
+          phpts: ${{ matrix.ts }}
+          phparch: ${{ matrix.arch }}
+          install: "0"
+          conf-args: "--enable-swow-ssl --enable-swow-curl"
+      - name: Install PHP and Swow extension
+        shell: powershell
+        working-directory: ./swow
+        run: |
+          Write-Host "::group::Fetching php from windows.php.net"
+          .\.github\workflows\winext\getphp.ps1 `
+            -PhpVer "${{ matrix.phpver }}" `
+            -PhpVCVer "${{ steps.ext-build.outputs.vcver }}" `
+            -PhpTs ${{ matrix.ts }}
+          $ret = $lastexitcode
+          Write-Host "::endgroup::"
+          if( 0 -Ne $ret ){
+              exit 1
+          }
+          Write-Host "::group::Copy extension to install dir"
+          Copy-Item ext\${{ matrix.arch }}\Release${{ matrix.ts == '1' && '_TS' || '' }}\php_swow.dll ${{ env.tools_path }}\php\ext\
+          "extension_dir=${{ env.tools_path }}\php\ext
+          zend_extension=opcache
+          " | Out-File -Encoding utf8 -Append ${{ env.tools_path }}\php\php.ini
+      - name: Checkout phpbc
+        uses: actions/checkout@v2
+        with:
+          repository: dixyes/phpbc
+          path: phpbc
+      - name: Test use actions
+        uses: ./phpbc/action
+        with:
+          # see https://github.com/swow/swow/discussions/68
+          skip: sapi/phpdbg.*,Zend/tests/arginfo_zpp_mismatch.*
+          #skip: sapi/.*,Zend/.*,ext/.*
+          ctrl_binary: ${{ env.tools_path }}\php\php.exe
+          expr_binary: ${{ env.tools_path }}\php\php.exe
+          expr_args: -d extension=swow
+      - name: Prepare artifact
+        shell: bash
+        id: prepareartifact
+        run: |
+          swow_ref="${{ needs.get-swowref.outputs.refhash }}"
+          swow_ref_tail=${swow_ref##??}
+          swow_ref_head=${swow_ref%%${swow_ref_tail}}
+          echo "::set-output name=key::${swow_ref}-${{ matrix.phpver }}-${{ matrix.ts == '1' && 'ts' || 'nts' }}"
+          mkdir report
+          cd report
+          mkdir -p ${{runner.os}}/${swow_ref_head}/${swow_ref_tail}
+          cp ../phpbc_results.json ${{runner.os}}/${swow_ref_head}/${swow_ref_tail}/PHP${{ matrix.phpver }}_${{ matrix.ts == '1' && 'ts' || 'nts' }}.json
+          cp ../phpbc_results.md ${{runner.os}}/${swow_ref_head}/${swow_ref_tail}/PHP${{ matrix.phpver }}_${{ matrix.ts == '1' && 'ts' || 'nts' }}.md
+          cp ../phpbc_results.md ${{runner.os}}_PHP${{ matrix.phpver }}_${{ matrix.ts == '1' && 'ts' || 'nts' }}_latest.md
+
+      - name: 'Upload test result'
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ needs.get-swowref.outputs.refhash }}
+          path: report/**
+          retention-days: 1
+  report:
+    needs:
+      - get-swowref
+      - unix-test
+      - win-test
+    if: needs.get-swowref.outputs.ok == 'yes'
+    name: Upload bc reports
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: Checkout self
+        uses: actions/checkout@v2
+        with:
+          path: report
+      - uses: actions/download-artifact@v2
+        id: download
+        with:
+          name: ${{ needs.get-swowref.outputs.refhash }}
+          path: report
+      - name: Create report
+        shell: bash
+        run: |
+          cd report
+          git config user.name "dixyes-bot"
+          git config user.email "me@dixy.es"
+          git add .
+          git commit -m "Update result for swow/swow@${{ needs.get-swowref.outputs.refhash }}"
+          git push
