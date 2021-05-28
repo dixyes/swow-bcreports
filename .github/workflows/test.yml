@@ -219,7 +219,7 @@ jobs:
         with:
           path: |
             ${{ env.tools_path }}
-          key: buildenv-v2-${{ matrix.arch }}-${{ matrix.ts }}-${{ steps.cacheprepare.outputs.phpver }}-${{ steps.cacheprepare.outputs.devpackver }}-${{ steps.cacheprepare.outputs.downloadeddeps }}-${{ steps.cacheprepare.outputs.phpsdkver }}
+          key: buildenv-v3-${{ matrix.arch }}-${{ matrix.ts }}-${{ steps.cacheprepare.outputs.phpver }}-${{ steps.cacheprepare.outputs.devpackver }}-${{ steps.cacheprepare.outputs.downloadeddeps }}-${{ steps.cacheprepare.outputs.phpsdkver }}
       - name: Build Swow extension
         id: ext-build
         uses: ./swow/.github/workflows/winext
@@ -249,10 +249,13 @@ jobs:
           }
           Write-Host "::group::Copy extension to install dir"
           Copy-Item ext\${{ matrix.arch }}\Release${{ matrix.ts == '1' && '_TS' || '' }}\php_swow.dll ${{ env.tools_path }}\php\ext\
+          if (-Not (Test-Path -Path ${{ env.tools_path }}\php\php.ini -PathType Leaf)){
+            Write-Host "::group::Generate php.ini to enable zend opcache"
           "extension_dir=${{ env.tools_path }}\php\ext
           zend_extension=opcache
-          opcache.jit=disable
+          ;opcache.jit=disable
           " | Out-File -Encoding utf8 -Append ${{ env.tools_path }}\php\php.ini
+          }
       - name: Checkout phpbc
         uses: actions/checkout@v2
         with:
