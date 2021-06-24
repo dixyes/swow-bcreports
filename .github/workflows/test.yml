@@ -53,7 +53,7 @@ jobs:
           echo "::set-output name=ok::${ok}"
   unix-test:
     needs: get-swowref
-    if: needs.get-swowref.outputs.ok == 'yes'
+    if: needs.get-swowref.outputs.ok == 'yes' || github.event_name == 'workflow_dispatch'
     #if: "false"
     name: Swow bc at ${{ matrix.os }} PHP ${{ matrix.phpver }}
     runs-on: ${{ matrix.os }}
@@ -135,7 +135,7 @@ jobs:
           retention-days: 1
   win-test:
     needs: get-swowref
-    if: needs.get-swowref.outputs.ok == 'yes'
+    if: needs.get-swowref.outputs.ok == 'yes' || github.event_name == 'workflow_dispatch'
     name: Swow bc at ${{ matrix.os }} PHP ${{ matrix.phpver }} ${{ matrix.ts == '1' && 'ts' || 'nts' }}
     runs-on: "${{ matrix.os }}"
     strategy:
