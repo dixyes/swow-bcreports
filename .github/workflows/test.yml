@@ -218,8 +218,10 @@ jobs:
         uses: actions/cache@v2
         with:
           path: |
-            ${{ env.tools_path }}
-          key: buildenv-v3-${{ matrix.arch }}-${{ matrix.ts }}-${{ steps.cacheprepare.outputs.phpver }}-${{ steps.cacheprepare.outputs.devpackver }}-${{ steps.cacheprepare.outputs.downloadeddeps }}-${{ steps.cacheprepare.outputs.phpsdkver }}
+            ${{ env.tools_path }}\php-sdk-binary-tools
+            ${{ env.tools_path }}\deps\*.zip
+            ${{ env.tools_path }}\*.zip
+          key: buildenv-v1-${{ matrix.arch }}-${{ matrix.ts }}-${{ steps.cacheprepare.outputs.phpver }}-${{ steps.cacheprepare.outputs.devpackver }}-${{ steps.cacheprepare.outputs.downloadeddeps }}-${{ steps.cacheprepare.outputs.phpsdkver }}
       - name: Build Swow extension
         id: ext-build
         uses: ./swow/.github/workflows/winext
