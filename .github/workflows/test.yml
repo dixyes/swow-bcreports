@@ -249,13 +249,37 @@ jobs:
           }
           Write-Host "::group::Copy extension to install dir"
           Copy-Item ext\${{ matrix.arch }}\Release${{ matrix.ts == '1' && '_TS' || '' }}\php_swow.dll ${{ env.tools_path }}\php\ext\
-          if (-Not (Test-Path -Path ${{ env.tools_path }}\php\php.ini -PathType Leaf)){
-            Write-Host "::group::Generate php.ini to enable zend opcache"
+          Write-Host "::group::Generate php.ini to enable zend opcache"
           "extension_dir=${{ env.tools_path }}\php\ext
           zend_extension=opcache
+          extension=bz2
+          extension=com_dotnet
+          extension=curl
+          extension=dba
+          extension=enchant
+          extension=exif
+          extension=ffi
+          extension=fileinfo
+          extension=ftp
+          extension=${{ matrix.phpver == '8.0' && 'gd' || 'gd2' }}
+          extension=gettext
+          extension=gmp
+          extension=intl
+          extension=mbstring
+          extension=mysqli
+          extension=openssl
+          extension=pdo_mysql
+          extension=pgsql
+          extension=shmop
+          extension=sockets
+          extension=sodium
+          extension=sysvshm
+          extension=soap
+          extension=tidy
+          ${{ matrix.phpver != '8.0' && 'extension=xmlrpc' || '' }}
+          extension=xsl
           ;opcache.jit=disable
           " | Out-File -Encoding utf8 -Append ${{ env.tools_path }}\php\php.ini
-          }
       - name: Checkout phpbc
         uses: actions/checkout@v2
         with:
