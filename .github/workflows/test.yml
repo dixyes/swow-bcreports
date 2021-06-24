@@ -233,6 +233,7 @@ jobs:
           phparch: ${{ matrix.arch }}
           install: "0"
           conf-args: "--enable-swow-ssl --enable-swow-curl"
+          fix-pickle: 1
       - name: Install PHP and Swow extension
         shell: powershell
         working-directory: ./swow
