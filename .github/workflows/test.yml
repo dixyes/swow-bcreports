@@ -13,6 +13,10 @@ on:
         description: 'Using PHPbc git ref'
         required: false
         default: ''
+      dbg:
+        description: 'Use tmate to debug remotely'
+        required: false
+        default: ''
 
 jobs:
   get-swowref:
