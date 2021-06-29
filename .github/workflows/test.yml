@@ -100,7 +100,58 @@ jobs:
           printf "::group::\033[1mDone build Swow\033[0m\n"
           php -n -d extension=.libs/swow.so --ri swow
           printf "::group::\033[1mInstall Swow\033[0m\n"
-          ${{ runner.os == 'Linux' && 'sudo' || ''}} make install-modules          
+          ${{ runner.os == 'Linux' && 'sudo' || ''}} make install-modules
+      - name: Prepare mysql
+        shell: bash
+        run: |
+          ${{ 'macOS' == runner.os && 'brew install mysql' || ''}}
+          echo " ::group::Generate config file"
+          mkdir -p /tmp/mysql/ctrl/data
+          cat > /tmp/mysql/ctrl/my.cnf <<EOF
+          [mysqld]
+          mysqlx=0
+          pid_file=/tmp/mysql/ctrl/mysqld.pid
+          socket=/tmp/mysql/ctrl/mysqld.sock
+          datadir=/tmp/mysql/ctrl/data
+          bind-address=127.0.0.1
+          port=3406
+          symbolic-links=0
+          server-id=1
+          log_bin=somebinlog
+          binlog_checksum=NONE
+          binlog_format=ROW
+          ${{ matrix.phpver == '7.3' && 'default_authentication_plugin=mysql_native_password' || ''}}
+          EOF
+          mkdir -p /tmp/mysql/expr/data
+          cat > /tmp/mysql/expr/my.cnf <<EOF
+          [mysqld]
+          mysqlx=0
+          pid_file=/tmp/mysql/expr/mysqld.pid
+          socket=/tmp/mysql/expr/mysqld.sock
+          datadir=/tmp/mysql/expr/data
+          bind-address=127.0.0.1
+          port=3506
+          symbolic-links=0
+          server-id=1
+          log_bin=somebinlog
+          binlog_checksum=NONE
+          binlog_format=ROW
+          ${{ matrix.phpver == '7.3' && 'default_authentication_plugin=mysql_native_password' || ''}}
+          EOF
+      - name: Run mysql server
+        shell: bash
+        run: |
+          echo "::group::Initialize database"
+          mysqld "--defaults-file=/tmp/mysql/ctrl/my.cnf" --initialize-insecure
+          mysqld "--defaults-file=/tmp/mysql/expr/my.cnf" --initialize-insecure
+          echo "::group::Start daemon"
+          mysqld "--defaults-file=/tmp/mysql/ctrl/my.cnf" --daemonize --log_error=error.log || echo Failed start daemon >&2
+          cat /tmp/mysql/ctrl/data/error.log
+          mysqld "--defaults-file=/tmp/mysql/expr/my.cnf" --daemonize --log_error=error.log || echo Failed start daemon >&2
+          cat /tmp/mysql/expr/data/error.log
+          echo "::group::Create test database"
+          mysql --host=127.0.0.1 --port=3406 -u root -e "CREATE DATABASE test;"
+          mysql --host=127.0.0.1 --port=3506 -u root -e "CREATE DATABASE test;"
       - name: Checkout phpbc
         uses: actions/checkout@v2
         with:
@@ -112,6 +163,8 @@ jobs:
           skip: Zend/tests/arginfo_zpp_mismatch.*
           #skip: sapi/.*,Zend/.*,ext/.*
           expr_args: -d extension=swow
+          ctrl_env: MYSQL_TEST_HOST=localhost:3406,MYSQL_TEST_PORT=3406,PDO_MYSQL_TEST_DSN=mysql:host=127.0.0.1;port=3406;dbname=test,PDO_MYSQL_TEST_USER=root
+          expr_env: MYSQL_TEST_HOST=localhost:3506,MYSQL_TEST_PORT=3506,PDO_MYSQL_TEST_DSN=mysql:host=127.0.0.1;port=3506;dbname=test,PDO_MYSQL_TEST_USER=root
       - name: Prepare artifact
         shell: bash
         id: prepareartifact
@@ -283,6 +336,84 @@ jobs:
           extension=xsl
           ;opcache.jit=disable
           " | Out-File -Encoding utf8 -Append ${{ env.tools_path }}\php\php.ini
+      - name: Prepare mysql
+        shell: bash
+        run: |
+          echo " ::group::Generate config file"
+          mkdir -p C:/mysql/ctrl/data
+          cat > C:/mysql/ctrl/my.cnf <<EOF
+          [mysqld]
+          pid_file=C:/mysql/ctrl/mysqld.pid
+          socket=C:/mysql/ctrl/mysqld.sock
+          datadir=C:/mysql/ctrl/data
+          bind-address=127.0.0.1
+          port=3406
+          symbolic-links=0
+          server-id=1
+          log_bin=somebinlog
+          binlog_checksum=NONE
+          binlog_format=ROW
+          ${{ matrix.phpver == '7.3' && 'default_authentication_plugin=mysql_native_password' || ''}}
+          EOF
+          mkdir -p C:/mysql/expr/data
+          cat > C:/mysql/expr/my.cnf <<EOF
+          [mysqld]
+          pid_file=C:/mysql/expr/mysqld.pid
+          socket=C:/mysql/expr/mysqld.sock
+          datadir=C:/mysql/expr/data
+          bind-address=127.0.0.1
+          port=3506
+          symbolic-links=0
+          server-id=1
+          log_bin=somebinlog
+          binlog_checksum=NONE
+          binlog_format=ROW
+          ${{ matrix.phpver == '7.3' && 'default_authentication_plugin=mysql_native_password' || ''}}
+          EOF
+      - name: Run mysql server
+        shell: powershell
+        run: |
+          Write-Host "::group::Initialize database"
+          & mysqld "--defaults-file=C:/mysql/ctrl/my.cnf" --initialize-insecure --console
+          & mysqld "--defaults-file=C:/mysql/expr/my.cnf" --initialize-insecure --console
+          Write-Host "::group::Start daemon"
+          Start-Process "mysqld.exe" -ArgumentList "--defaults-file=C:/mysql/ctrl/my.cnf --log_error=error.log"
+          Start-Process "mysqld.exe" -ArgumentList "--defaults-file=C:/mysql/expr/my.cnf --log_error=error.log"
+          Write-Host "::group::Create test database"
+          $done = $false
+          for($i=0; $i -Lt 5; $i++){
+            Write-Host "Waiting for ctrl mysql start"
+            try{
+              & mysql --host=127.0.0.1 --port=3406 -u root -e "CREATE DATABASE test;" 2>&1
+              $done = $true
+              break
+            }catch{
+              Write-Host $_
+              continue
+            }finally{
+              Start-Sleep -Seconds 2
+            }
+          }
+          if(-Not $done){
+            exit 1
+          }
+          $done = $false
+          for($i=0; $i -Lt 5; $i++){
+            Write-Host "Waiting for expr mysql start"
+            try{
+              & mysql --host=127.0.0.1 --port=3506 -u root -e "CREATE DATABASE test;" 2>&1
+              $done = $true
+              break
+            }catch{
+              Write-Host $_
+              continue
+            }finally{
+              Start-Sleep -Seconds 2
+            }
+          }
+          if(-Not $done){
+            exit 1
+          }
       - name: Checkout phpbc
         uses: actions/checkout@v2
         with:
@@ -297,6 +428,8 @@ jobs:
           ctrl_binary: ${{ env.tools_path }}\php\php.exe
           expr_binary: ${{ env.tools_path }}\php\php.exe
           expr_args: -d extension=swow
+          ctrl_env: MYSQL_TEST_HOST=localhost:3406,MYSQL_TEST_PORT=3406,PDO_MYSQL_TEST_DSN=mysql:host=127.0.0.1;port=3406;dbname=test,PDO_MYSQL_TEST_USER=root
+          expr_env: MYSQL_TEST_HOST=localhost:3506,MYSQL_TEST_PORT=3506,PDO_MYSQL_TEST_DSN=mysql:host=127.0.0.1;port=3506;dbname=test,PDO_MYSQL_TEST_USER=root
       - name: Prepare artifact
         shell: bash
         id: prepareartifact
