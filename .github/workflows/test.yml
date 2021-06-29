@@ -9,6 +9,10 @@ on:
         description: 'Using Swow git ref'
         required: true
         default: 'ci'
+      phpbc_ref:
+        description: 'Using PHPbc git ref'
+        required: false
+        default: ''
 
 jobs:
   get-swowref:
@@ -157,6 +161,7 @@ jobs:
         with:
           repository: dixyes/phpbc
           path: phpbc
+          ref: ${{ github.event.inputs && github.event.inputs.phpbc_ref || 'master' }}
       - name: Test use actions
         uses: ./phpbc/action
         with:
@@ -419,6 +424,7 @@ jobs:
         with:
           repository: dixyes/phpbc
           path: phpbc
+          ref: ${{ github.event.inputs && github.event.inputs.phpbc_ref || 'master' }}
       - name: Test use actions
         uses: ./phpbc/action
         with:
