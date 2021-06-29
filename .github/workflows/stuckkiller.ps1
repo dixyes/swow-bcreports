@@ -49,6 +49,8 @@ while($true){
             continue
         }
         # stuck
+        $cmd = $process.CommandLine
+        "${mypid} ${cmd}" | Tee-Object -FilePath $LogFile -Append | Out-Host
         "${mypid} stuck, killing" | Tee-Object -FilePath $LogFile -Append | Out-Host
         Stop-Process -Id $mypid
     }
