@@ -61,17 +61,17 @@ jobs:
           echo "::set-output name=ok::${ok}"
   unix-test:
     needs: get-swowref
-    if: needs.get-swowref.outputs.ok == 'yes' || github.event_name == 'workflow_dispatch'
-    #if: "false"
+    #if: needs.get-swowref.outputs.ok == 'yes' || github.event_name == 'workflow_dispatch'
+    if: "false"
     name: Swow bc at ${{ matrix.os }} PHP ${{ matrix.phpver }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-latest", "macos-latest"]
-        #os: ["ubuntu-latest"]
-        phpver: ["7.3", "7.4", "8.0"]
-        #phpver: ["7.4"]
+        #os: ["ubuntu-latest", "macos-latest"]
+        os: ["ubuntu-latest"]
+        #phpver: ["7.3", "7.4", "8.0"]
+        phpver: ["7.4"]
       max-parallel: 6
     steps:
       - name: Setup PHP
@@ -160,6 +160,9 @@ jobs:
           echo "::group::Create test database"
           mysql --host=127.0.0.1 --port=3406 -u root -e "CREATE DATABASE test;CREATE DATABASE pdotest;"
           mysql --host=127.0.0.1 --port=3506 -u root -e "CREATE DATABASE test;CREATE DATABASE pdotest;"
+      - name: Setup tmate session for debug
+        if: github.event.inputs && github.event.inputs.dbg || false
+        uses: mxschmitt/action-tmate@v3
       - name: Checkout phpbc
         uses: actions/checkout@v2
         with:
@@ -197,6 +200,7 @@ jobs:
           retention-days: 1
   win-test:
     needs: get-swowref
+    #if: "false"
     if: needs.get-swowref.outputs.ok == 'yes' || github.event_name == 'workflow_dispatch'
     name: Swow bc at ${{ matrix.os }} PHP ${{ matrix.phpver }} ${{ matrix.ts == '1' && 'ts' || 'nts' }}
     runs-on: "${{ matrix.os }}"
@@ -205,11 +209,13 @@ jobs:
       matrix:
         arch: ["x64"]
         os: ['windows-latest', 'windows-2016']
+        #os: ['windows-2016']
         #os: ['windows-latest']
-        phpver: ['8.0', '7.4', '7.3']
-        #phpver: ['8.0']
-        ts: [ '0', '1' ]
-        #ts: [ '0']
+        #phpver: ['8.0', '7.4', '7.3']
+        #phpver: ['7.3']
+        phpver: ['8.0']
+        #ts: [ '0', '1' ]
+        ts: [ '0']
         exclude:
           - os: windows-latest
             phpver: "7.4"
@@ -434,11 +440,37 @@ jobs:
         run: |
           Invoke-WebRequest -UseBasicParsing -Uri https://raw.githubusercontent.com/${{ github.repository }}/code/.github/workflows/stuckkiller.ps1 -OutFile "stuckkiller.ps1"
           Start-Process -FilePath "powershell.exe" -Verb RunAs -ArgumentList ('-NoExit -Command "Set-Location ' + (Get-Location).Path + '; .\stuckkiller.ps1"')
+      - name: Setup context.json
+        if: github.event.inputs && github.event.inputs.dbg || false
+        shell: php -r "copy('{0}','context.json');"
+        run: |
+          {
+            "inputs": {
+              "ctrl_workdir":"ctrl",
+              "expr_workdir":"expr",
+              "ctrl_binary":"",
+              "expr_binary":"",
+              "ctrl_args":"",
+              "expr_args":"-d extension=swow",
+              "skip":"sapi/phpdbg.*,Zend/tests/arginfo_zpp_mismatch.*",
+              "tests":"",
+              "ctrl_env":"",
+              "expr_env":""
+            },
+            "github": ${{toJSON(github)}},
+            "env": ${{toJSON(env)}},
+            "steps": ${{toJSON(steps)}},
+            "runner": ${{toJSON(runner)}},
+            "matrix": ${{toJSON(matrix)}}
+          }
+      - name: Setup tmate session for debug
+        if: github.event.inputs && github.event.inputs.dbg || false
+        uses: mxschmitt/action-tmate@v3
       - name: Test use actions
         uses: ./phpbc/action
         with:
           # see https://github.com/swow/swow/discussions/68
-          skip: sapi/phpdbg.*,Zend/tests/arginfo_zpp_mismatch.*
+          skip: sapi/phpdbg.*,Zend/tests/arginfo_zpp_mismatch.*,ext/openssl/.*
           #skip: sapi/.*,Zend/.*,ext/.*
           ctrl_binary: ${{ env.tools_path }}\php\php.exe
           expr_binary: ${{ env.tools_path }}\php\php.exe
