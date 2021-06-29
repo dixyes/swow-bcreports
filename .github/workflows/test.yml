@@ -314,7 +314,7 @@ jobs:
           extension=dba
           extension=enchant
           extension=exif
-          extension=ffi
+          ${{  matrix.phpver != '7.3' && 'extension=ffi' || '' }}
           extension=fileinfo
           extension=ftp
           extension=${{ matrix.phpver == '8.0' && 'gd' || 'gd2' }}
