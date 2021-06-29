@@ -21,7 +21,7 @@ jobs:
       - name: Checkout Swow
         uses: actions/checkout@v2
         with:
-          ref: "${{ github.event.inputs.swow_ref && github.event.inputs.swow_ref || 'ci' }}"
+          ref: "${{ github.event.inputs && github.event.inputs.swow_ref || 'ci' }}"
           repository: swow/swow
           path: swow
       - name: Get Swow ref hash
