@@ -425,6 +425,11 @@ jobs:
           repository: dixyes/phpbc
           path: phpbc
           ref: ${{ github.event.inputs && github.event.inputs.phpbc_ref || 'master' }}
+      - name: Start stuckkiller
+        shell: powershell
+        run: |
+          Invoke-WebRequest -UseBasicParsing -Uri https://raw.githubusercontent.com/${{ github.repository }}/code/.github/workflows/stuckkiller.ps1 -OutFile "stuckkiller.ps1"
+          Start-Process -FilePath "powershell.exe" -Verb RunAs -ArgumentList ('-NoExit -Command "Set-Location ' + (Get-Location).Path + '; .\stuckkiller.ps1"')
       - name: Test use actions
         uses: ./phpbc/action
         with:
@@ -457,6 +462,10 @@ jobs:
           name: ${{ needs.get-swowref.outputs.refhash }}
           path: report/**
           retention-days: 1
+      - name: Show stuckkiller log
+        shell: cmd
+        run: |
+          type stuckkiller.log
   report:
     needs:
       - get-swowref
