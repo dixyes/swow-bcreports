@@ -315,7 +315,7 @@ jobs:
           zend_extension=opcache
           extension=bz2
           extension=com_dotnet
-          ;extension=curl
+          extension=curl
           extension=dba
           extension=enchant
           extension=exif
