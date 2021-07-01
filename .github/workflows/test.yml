@@ -475,7 +475,7 @@ jobs:
       - get-swowref
       - unix-test
       - win-test
-    if: needs.get-swowref.outputs.ok == 'yes'
+    if: 'false'
     name: Upload bc reports
     runs-on: "ubuntu-latest"
     steps:
