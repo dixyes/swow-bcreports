@@ -24,10 +24,10 @@ while($true){
         if($children.count -Ne 0){
             continue
         }
-        "found ${mypid}" | Tee-Object -FilePath $LogFile -Append | Out-Host
         $exist = $monitoring[$mypid];
         if(-Not $exist){
             # new process
+            "new process ${mypid}" | Tee-Object -FilePath $LogFile -Append | Out-Host
             $expire = (Get-Date) + (New-TimeSpan -Seconds $TimeOut)
             $new_monitoring[$mypid] = @{
                 expire = $expire;
@@ -35,8 +35,11 @@ while($true){
             }
             continue
         }
-        if ($exist["expire"] -Lt (Get-Date)){
+        $expire = $exist["expire"]
+        $now = Get-Date
+        if ($expire -Gt $now){
             # not stuck
+            "${mypid} is not expired: $expire vs $now" | Tee-Object -FilePath $LogFile -Append | Out-Host
             $new_monitoring[$mypid] = $exist
             continue
         }
@@ -45,6 +48,7 @@ while($true){
             ($exist["proc"].CreationDate -Ne $process.CreationDate)
         ){
             # not same process
+            "$mypid cmdline/creationdate changed, should be different process" | Tee-Object -FilePath $LogFile -Append | Out-Host
             $new_monitoring[$mypid] = $exist
             continue
         }
