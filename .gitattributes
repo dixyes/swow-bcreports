@@ -1,0 +1,5 @@
+Linux/**.json filter=lfs diff=lfs merge=lfs -text
+macOS/**.json filter=lfs diff=lfs merge=lfs -text
+Windows/**.json filter=lfs diff=lfs merge=lfs -text
+/*_latest.md filter=lfs diff=lfs merge=lfs -text
+*.json filter=lfs diff=lfs merge=lfs -text
